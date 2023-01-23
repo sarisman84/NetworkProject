@@ -2,8 +2,5 @@
 .vs/
 Intermediate/
 Lib/
-.vcxproj
-.filters
-Shared/Shared.vcxproj
 
-Shared/Shared.vcxproj.filters
+
