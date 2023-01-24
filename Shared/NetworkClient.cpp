@@ -110,6 +110,13 @@ const bool NetworkClient::Update()
 		{
 			if (strcmp(myMessage, "quit") == 0)
 			{
+				Buffer response;
+				response.WriteData(DataType::UserInfo);
+				response.WriteData(false);
+				response.WriteData(myID);
+
+				Send(myServerAddress, response);
+
 				myIsRunning = false;
 				return myIsRunning;
 			}
@@ -139,22 +146,50 @@ const bool NetworkClient::Update()
 
 		incomingData.ReadData(type);
 
-		int messageSize;
-		int nameSize;
-		char message[510];
-		char name[510];
-
-		incomingData.ReadData(messageSize);
-		incomingData.ReadData(message, messageSize);
-		incomingData.ReadData(nameSize);
-		incomingData.ReadData(name, nameSize);
-		std::string msg = std::string(name) + ": " + std::string(message);
+		
+		
 
 		switch (type)
 		{
-		case DataType::Message:
+		case DataType::UserInfo:
+		{
+			int userNameSize;
+			char userName[510];
+
+			int logMessageSize;
+			char logMessage[510];
+
+			incomingData.ReadData(userNameSize);
+			incomingData.ReadData(userName, userNameSize);
+			incomingData.ReadData(logMessageSize);
+			incomingData.ReadData(logMessage, logMessageSize);
+
+
+			std::string msg = std::string(userName) + " " + logMessage;
 			std::cout << msg << std::endl;
 			break;
+		}
+			
+		case DataType::Message:
+		{
+			int messageSize;
+			int nameSize;
+			char message[510];
+			char name[510];
+
+		
+
+			incomingData.ReadData(messageSize);
+			incomingData.ReadData(message, messageSize);
+			incomingData.ReadData(nameSize);
+			incomingData.ReadData(name, nameSize);
+
+			std::string msg = std::string(name) + ": " + std::string(message);
+			std::cout << msg << std::endl;
+			break;
+		}
+
+
 		case DataType::Command:
 			std::cout << "Recieved Command!" << std::endl;
 			break;

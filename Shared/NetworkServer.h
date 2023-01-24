@@ -6,8 +6,15 @@ struct Client
 	sockaddr_in myAddress;
 	std::string myName;
 	uint8_t myPort;
+
+
+	inline bool operator==(const Client& anOther)
+	{
+		return myPort == anOther.myPort;
+	}
 };
 
+class NetworkServer;
 
 
 struct MessageContext
@@ -35,7 +42,7 @@ private:
 
 private:
 	sockaddr_in myAdress;
-	std::vector<Client> myClients;
+	std::unordered_map<uint8_t, Client> myClients;
 
 	std::thread myInputThread;
 	std::atomic<bool> myIsRunningFlag;

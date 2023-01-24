@@ -71,12 +71,8 @@ const bool NetworkServer::Update()
 
 
 		bool joinFlag;
-		int nameSize;
-		char name[506];
-
 		recievedData.ReadData(joinFlag);
-		recievedData.ReadData(nameSize);
-		recievedData.ReadData(name, nameSize);
+	
 
 		//define a function that every logging event uses. In turn, this will be used to send messages about what each user does in the server.
 		auto spreadLogMessage = [](Client& aClient, MessageContext& someContext)
@@ -96,28 +92,36 @@ const bool NetworkServer::Update()
 
 		LogMessage log;
 
-		{ //Store current user's name and name size as well as initialize the log message properly.
-			memcpy(log.myUserName, potentialClient.myName.c_str(), potentialClient.myName.length());
-			log.myUserNameSize = potentialClient.myName.length();
-			log.myServerInstance = this;
-		}
+		
 
 
 		if (joinFlag)
 		{
+			int nameSize;
+			char name[506];
+
+			recievedData.ReadData(nameSize);
+			recievedData.ReadData(name, nameSize);
+
+			{ //Store current user's name and name size as well as initialize the log message properly.
+				memcpy(log.myUserName, name, strlen(name) + 1);
+				log.myUserNameSize = strlen(name) + 1;
+				log.myServerInstance = this;
+			}
 			if (!ExistsUserName(name))
 			{
+				auto newIndex = myClients.size();
 				response.WriteData(1);
-				response.WriteData(myClients.size());
+				response.WriteData(newIndex);
 				potentialClient.myName = name;
-				myClients.push_back(potentialClient);
+				myClients[newIndex] = potentialClient;
 				std::cout << "User joined: " << potentialClient.myName << std::endl;
 
 				{//Message this event to the other existing clients
 					
 					{ //Log the fact that this user logged in.
-						const char* msg = "logged in.";
-						memcpy(log.myLogMessage, "logged in.", strlen(msg) + 1);
+						const char* msg = "joined.";
+						memcpy(log.myLogMessage, msg, strlen(msg) + 1);
 						log.myLogMessageSize = strlen(msg) + 1;
 					}
 				
@@ -135,9 +139,46 @@ const bool NetworkServer::Update()
 				std::cout << "User name " << name << " taken! Rejecting join request!" << std::endl;
 				response.WriteData(0);
 			}
+
+			Send(potentialClient.myAddress, response);
+		}
+		else
+		{
+			
+
+
+			int index;
+			recievedData.ReadData(index);
+
+			auto leftUserName = myClients[index].myName;
+
+			{ //Store current user's name and name size as well as initialize the log message properly.
+				memcpy(log.myUserName, leftUserName.c_str(), leftUserName.length() + 1);
+				log.myUserNameSize = leftUserName.length() + 1;
+				log.myServerInstance = this;
+			}
+
+			myClients.erase(index);
+
+
+			{//Message this event to the other existing clients
+
+				{ //Log the fact that this user logged out.
+					const char* msg = "left.";
+					memcpy(log.myLogMessage, msg, strlen(msg) + 1);
+					log.myLogMessageSize = strlen(msg) + 1;
+				}
+
+
+				//Message very client but the new user but the defined spread logic and information context.
+				MessageClients(log, spreadLogMessage);
+			}
+
+			std::cout << "User left: " << leftUserName << std::endl;
+
 		}
 
-		Send(potentialClient.myAddress, response);
+	
 
 		break;
 	}
@@ -160,7 +201,7 @@ const bool NetworkServer::Update()
 			//First, create a context to store specific information about a chat message
 			struct ChatMessage : public MessageContext
 			{
-				ChatMessage(const int aMessageSize, char aMessage[510], const int aUser, std::vector<Client>& someClients) : myClients(someClients)
+				ChatMessage(const int aMessageSize, char aMessage[510], const int aUser, std::unordered_map<uint8_t, Client>& someClients) : myClients(someClients)
 				{
 					myMessageSize = aMessageSize;
 					memcpy(myMessage, aMessage, 510);
@@ -170,7 +211,7 @@ const bool NetworkServer::Update()
 				int myMessageSize;
 				char myMessage[510];
 				int myUser;
-				std::vector<Client>& myClients;
+				std::unordered_map<uint8_t, Client>& myClients;
 			};
 
 			//define the response function via a function pointer using lambda
@@ -220,35 +261,58 @@ const bool NetworkServer::Update()
 //
 //	}
 //}
-void NetworkServer::MessageClients(MessageContext& someContext, void(*aMessageCallback)(Client& aClient, MessageContext& someContext), const uint8_t anIndex = (uint8_t)(-1))
+void NetworkServer::MessageClients(MessageContext& someContext, void(*aMessageCallback)(Client& aClient, MessageContext& someContext), const uint8_t anIndex)
 {
-	for (size_t i = 0; i < myClients.size(); i++)
+	for (auto& client : myClients)
 	{
-		if (anIndex != -1 && anIndex == i) continue;
+		if (anIndex != -1 && anIndex == client.first) continue;
 
-		aMessageCallback(myClients[i], someContext);
+		aMessageCallback(client.second, someContext);
 	}
 }
 
 const bool NetworkServer::ExistsUserName(const std::string& aName)
 {
-	auto it = std::find_if(myClients.begin(), myClients.end(), [aName](const Client& aClient) { return aClient.myName == aName; });
-	return it != myClients.end();
+	for (auto& client : myClients)
+	{
+		if (client.second.myName == aName)
+			return true;
+	}
+
+	return false;
 }
 
 const bool NetworkServer::ExistsUserPort(const uint8_t aPort)
 {
-	auto it = std::find_if(myClients.begin(), myClients.end(), [aPort](const Client& aClient) { return aClient.myPort == aPort; });
-	return it != myClients.end();
+	for (auto& client : myClients)
+	{
+		if (client.second.myPort == aPort)
+			return true;
+	}
+
+	return false;
 }
 
 const size_t NetworkServer::NameToIndex(const std::string& aName)
 {
-	auto it = std::find_if(myClients.begin(), myClients.end(), [aName](const Client& aClient) { return aClient.myName == aName; });
-	return std::distance(myClients.begin(), it);
+
+	for (auto& client : myClients)
+	{
+		if (client.second.myName == aName)
+			return client.first;
+	}
+	//auto it = std::find_if(myClients.begin(), myClients.end(), [aName](const Client& aClient) { return aClient.myName == aName; });
+	//return std::distance(myClients.begin(), it);
+	return size_t(-1);
 }
 
 const size_t NetworkServer::PortToIndex(const uint8_t aPort)
 {
-	return size_t();
+	for (auto& client : myClients)
+	{
+		if (client.second.myPort == aPort)
+			return client.first;
+	}
+
+	return size_t(-1);
 }
