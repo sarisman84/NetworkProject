@@ -9,12 +9,24 @@ struct Client
 };
 
 
+
+struct MessageContext
+{
+	NetworkServer* myServerInstance;
+	template<typename T>
+	T& Get()
+	{
+		return *static_cast<T*>(this);
+	}
+};
+
 class NetworkServer : public NetworkEntity
 {
 public:
 	NetworkServer(const uint8_t aPort);
 	~NetworkServer() override;
 	const bool Update() override;
+	void MessageClients(MessageContext& someContext, void(*aMessageCallback)(Client& aClient, MessageContext& someContext), const uint8_t anIndex = (uint8_t)(-1));
 private:
 	const bool ExistsUserName(const std::string& aName);
 	const bool ExistsUserPort(const uint8_t aPort);
