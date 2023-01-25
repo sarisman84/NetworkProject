@@ -28,9 +28,12 @@ namespace Networking
 			buffer.WriteData(DataType::Message);
 			buffer.WriteData(messageSize);
 			buffer.WriteData(message, messageSize);
-			//Simulating scenario where the data is sent by resetting the index of this buffer.
 
+			//Simulating scenario where the data is being recieved by resetting the index of this buffer.
+			//This means that the pointer in the buffer is reset, but the data is the same.
 			buffer.Reset();
+
+
 			//Recieved data;
 			char incomingMessage[512];
 			int incomingMessageSize;
@@ -56,6 +59,7 @@ namespace Networking
 			std::array<char[512], messageCount> cachedMessages;
 			std::array<int, messageCount> cachedMessageSizes;
 
+			buffer.WriteData(messageCount);
 			for (size_t i = 0; i < messageCount; i++)
 			{
 				char message[512];
@@ -75,12 +79,17 @@ namespace Networking
 				cachedMessageSizes[i] = messageSize;
 
 			}
-			//Simulating scenario where the data is sent by resetting the index of this buffer.
+			
+
+			//Simulating scenario where the data is being recieved by resetting the index of this buffer.
+			//This means that the pointer in the buffer is reset, but the data is the same.
 			buffer.Reset();
 
+			int incomingMessageCount;
+			buffer.ReadData(incomingMessageCount);
 
 			//Recieved data;
-			for (size_t i = 0; i < messageCount; i++)
+			for (size_t i = 0; i < incomingMessageCount; i++)
 			{
 
 				char incomingMessage[512];
