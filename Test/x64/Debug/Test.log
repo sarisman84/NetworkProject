@@ -1,0 +1,7 @@
+﻿  Test.cpp
+  The contents of <string_view> are available only with C++17 or later.
+D:\Projects\Git\NetworkProject\Shared\NetworkEntity.h(22,64): warning C4227: anachronism used: qualifiers on reference are ignored
+D:\Projects\Git\NetworkProject\Test\Test.cpp(24,1): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+D:\Projects\Git\NetworkProject\Test\Test.cpp(66,1): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+     Creating library D:\Projects\Git\NetworkProject\Bin\Debug\Test.lib and object D:\Projects\Git\NetworkProject\Bin\Debug\Test.exp
+  Test.vcxproj -> D:\Projects\Git\NetworkProject\Bin\Debug\Test.dll
