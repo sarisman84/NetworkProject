@@ -35,8 +35,8 @@ NetworkServer::NetworkServer(const uint8_t aPort) : NetworkEntity()
 
 NetworkServer::~NetworkServer()
 {
-	myInputThread.join();
-	WSACleanup();
+	OnShutdown();
+
 }
 
 const bool NetworkServer::Update()
@@ -58,190 +58,15 @@ const bool NetworkServer::Update()
 	switch (type)
 	{
 	case DataType::UserInfo:
-	{
-		struct LogMessage : public MessageContext
-		{
-			char myUserName[510];
-			int myUserNameSize;
-
-			char myLogMessage[510];
-			int myLogMessageSize;
-
-		};
-
-
-		bool joinFlag;
-		recievedData.ReadData(joinFlag);
-	
-
-		//define a function that every logging event uses. In turn, this will be used to send messages about what each user does in the server.
-		auto spreadLogMessage = [](Client& aClient, MessageContext& someContext)
-		{
-			LogMessage& msg = someContext.Get<LogMessage>();
-
-			Buffer response;
-
-			response.WriteData(DataType::UserInfo);
-			response.WriteData(msg.myUserNameSize);
-			response.WriteData(msg.myUserName, msg.myUserNameSize);
-			response.WriteData(msg.myLogMessageSize);
-			response.WriteData(msg.myLogMessage, msg.myLogMessageSize);
-
-			msg.myServerInstance->Send(aClient.myAddress, response);
-		};
-
-		LogMessage log;
-
-		
-
-
-		if (joinFlag)
-		{
-			int nameSize;
-			char name[506];
-
-			recievedData.ReadData(nameSize);
-			recievedData.ReadData(name, nameSize);
-
-			{ //Store current user's name and name size as well as initialize the log message properly.
-				memcpy(log.myUserName, name, strlen(name) + 1);
-				log.myUserNameSize = strlen(name) + 1;
-				log.myServerInstance = this;
-			}
-			if (!ExistsUserName(name))
-			{
-				auto newIndex = myClients.size();
-				response.WriteData(1);
-				response.WriteData(newIndex);
-				potentialClient.myName = name;
-				myClients[newIndex] = potentialClient;
-				std::cout << "User joined: " << potentialClient.myName << std::endl;
-
-				{//Message this event to the other existing clients
-					
-					{ //Log the fact that this user logged in.
-						const char* msg = "joined.";
-						memcpy(log.myLogMessage, msg, strlen(msg) + 1);
-						log.myLogMessageSize = strlen(msg) + 1;
-					}
-				
-
-					//Message very client but the new user but the defined spread logic and information context.
-					MessageClients(log, spreadLogMessage, myClients.size() - 1);
-				}
-
-
-
-
-			}
-			else
-			{
-				std::cout << "User name " << name << " taken! Rejecting join request!" << std::endl;
-				response.WriteData(0);
-			}
-
-			Send(potentialClient.myAddress, response);
-		}
-		else
-		{
-			
-
-
-			int index;
-			recievedData.ReadData(index);
-
-			auto leftUserName = myClients[index].myName;
-
-			{ //Store current user's name and name size as well as initialize the log message properly.
-				memcpy(log.myUserName, leftUserName.c_str(), leftUserName.length() + 1);
-				log.myUserNameSize = leftUserName.length() + 1;
-				log.myServerInstance = this;
-			}
-
-			myClients.erase(index);
-
-
-			{//Message this event to the other existing clients
-
-				{ //Log the fact that this user logged out.
-					const char* msg = "left.";
-					memcpy(log.myLogMessage, msg, strlen(msg) + 1);
-					log.myLogMessageSize = strlen(msg) + 1;
-				}
-
-
-				//Message very client but the new user but the defined spread logic and information context.
-				MessageClients(log, spreadLogMessage);
-			}
-
-			std::cout << "User left: " << leftUserName << std::endl;
-
-		}
-
-	
-
+		HandleUserInfo(recievedData, potentialClient);
 		break;
-	}
-
-
 	case DataType::Message:
-
-		int messageSize;
-		char message[510];
-		int user;
-
-		{//Fetch relevant information about the user and its message.
-			recievedData.ReadData(user);
-			recievedData.ReadData(messageSize);
-			recievedData.ReadData(message, messageSize);
-		}
-
-		{ //Apply Message to every client but the sender
-
-			//First, create a context to store specific information about a chat message
-			struct ChatMessage : public MessageContext
-			{
-				ChatMessage(const int aMessageSize, char aMessage[510], const int aUser, std::unordered_map<uint8_t, Client>& someClients) : myClients(someClients)
-				{
-					myMessageSize = aMessageSize;
-					memcpy(myMessage, aMessage, 510);
-					myUser = aUser;
-				}
-
-				int myMessageSize;
-				char myMessage[510];
-				int myUser;
-				std::unordered_map<uint8_t, Client>& myClients;
-			};
-
-			//define the response function via a function pointer using lambda
-			auto spreadMessage = [](Client& aClient, MessageContext& someContext)
-			{
-				ChatMessage& msg = someContext.Get<ChatMessage>();
-
-				char name[510];
-
-				memcpy(name, msg.myClients[msg.myUser].myName.c_str(), 510);
-				Buffer response;
-				response.WriteData(DataType::Message);
-				response.WriteData(msg.myMessageSize);
-				response.WriteData(msg.myMessage, msg.myMessageSize);
-				response.WriteData((int)strlen(name) + 1);
-				response.WriteData(name, (int)strlen(name) + 1);
-				msg.myServerInstance->Send(aClient.myAddress, response);
-			};
-
-
-			ChatMessage chatMessage{ messageSize, message, user, myClients };
-			chatMessage.myServerInstance = this;
-			MessageClients(chatMessage, spreadMessage, user);
-		}
-
+		HandleMessages(recievedData);
 		break;
 	case DataType::Command:
 		std::cout << "Some Command!" << std::endl;
 		break;
-	case DataType::Debug:
+	case DataType::Status:
 		std::cout << "Some Debug!" << std::endl;
 		break;
 	default:
@@ -261,15 +86,6 @@ const bool NetworkServer::Update()
 //
 //	}
 //}
-void NetworkServer::MessageClients(MessageContext& someContext, void(*aMessageCallback)(Client& aClient, MessageContext& someContext), const uint8_t anIndex)
-{
-	for (auto& client : myClients)
-	{
-		if (anIndex != -1 && anIndex == client.first) continue;
-
-		aMessageCallback(client.second, someContext);
-	}
-}
 
 const bool NetworkServer::ExistsUserName(const std::string& aName)
 {
@@ -315,4 +131,189 @@ const size_t NetworkServer::PortToIndex(const uint8_t aPort)
 	}
 
 	return size_t(-1);
+}
+
+void NetworkServer::HandleUserInfo(Buffer& someRecievedData, Client& anPotentialClient)
+{
+#pragma region Setup
+	Buffer response;
+
+	bool joinFlag;
+	someRecievedData.ReadData(joinFlag);
+
+	int nameSize;
+	char name[510];
+
+	int logMessageSize;
+	char logMessage[510];
+
+	//define a function that every logging event uses. In turn, this will be used to send messages about what each user does in the server.
+	auto spreadLogMessage = [this, &nameSize, &name, &logMessageSize, &logMessage](Client& aClient)
+	{
+
+		Buffer response;
+
+		response.WriteData(DataType::UserInfo);
+		response.WriteData(nameSize);
+		response.WriteData(name, nameSize);
+		response.WriteData(logMessageSize);
+		response.WriteData(logMessage, logMessageSize);
+
+		Send(aClient.myAddress, response);
+	};
+
+
+#pragma endregion
+
+	if (joinFlag) //User joined logic
+	{
+
+
+		someRecievedData.ReadData(nameSize);
+		someRecievedData.ReadData(name, nameSize);
+
+		if (!ExistsUserName(name))
+		{
+			auto newIndex = myClients.size();
+			response.WriteData(1);
+			response.WriteData(newIndex);
+			anPotentialClient.myName = name;
+			myClients[newIndex] = anPotentialClient;
+			std::cout << "User joined: " << anPotentialClient.myName << std::endl;
+
+			{//Message this event to the other existing clients
+
+				{ //Log the fact that this user logged in.
+					const char* msg = "joined.";
+					memcpy(logMessage, msg, strlen(msg) + 1);
+					logMessageSize = strlen(msg) + 1;
+				}
+
+
+				//Message very client but the new user but the defined spread logic and information context.
+				MessageClients(spreadLogMessage, myClients.size() - 1);
+			}
+
+
+
+
+		}
+		else
+		{
+			std::cout << "User name " << name << " taken! Rejecting join request!" << std::endl;
+			response.WriteData(0);
+		}
+
+		Send(anPotentialClient.myAddress, response);
+		return;
+	}
+
+
+	{ //User left logic
+		int index;
+		someRecievedData.ReadData(index);
+
+		auto leftUserName = myClients[index].myName;
+
+		{ //Store current user's name and name size as well as initialize the log message properly.
+			memcpy(name, leftUserName.c_str(), leftUserName.length() + 1);
+			nameSize = leftUserName.length() + 1;
+		}
+
+		myClients.erase(index);
+
+
+		{//Message this event to the other existing clients
+
+			{ //Log the fact that this user logged out.
+				const char* msg = "left.";
+				memcpy(logMessage, msg, strlen(msg) + 1);
+				logMessageSize = strlen(msg) + 1;
+			}
+
+
+			//Message very client but the new user but the defined spread logic and information context.
+			MessageClients(spreadLogMessage);
+		}
+
+		std::cout << "User left: " << leftUserName << std::endl;
+	}
+
+
+
+
+}
+
+void NetworkServer::HandleMessages(Buffer& someRecievedData)
+{
+	int messageSize;
+	char message[510];
+	int user;
+
+	{//Fetch relevant information about the user and its message.
+		someRecievedData.ReadData(user);
+		someRecievedData.ReadData(messageSize);
+		someRecievedData.ReadData(message, messageSize);
+	}
+
+	{ //Apply Message to every client but the sender
+
+		//First, create a context to store specific information about a chat message
+
+		//define the response function via a function pointer using lambda
+		auto spreadMessage = [this, &messageSize, &message, &user](Client& aClient)
+		{
+
+			char name[510];
+
+			memcpy(name, myClients[user].myName.c_str(), 510);
+			Buffer response;
+			response.WriteData(DataType::Message);
+			response.WriteData(messageSize);
+			response.WriteData(message, messageSize);
+			response.WriteData((int)strlen(name) + 1);
+			response.WriteData(name, (int)strlen(name) + 1);
+			Send(aClient.myAddress, response);
+		};
+
+
+		MessageClients(spreadMessage, user);
+	}
+}
+
+void NetworkServer::OnShutdown()
+{
+	std::cout << "Shutting Down!" << std::endl;
+	myIsRunningFlag = false;
+
+	auto shutdownMessage = [this](Client& aClient)
+	{
+		char message[510];
+
+		Buffer response;
+
+		response.WriteData(DataType::Status);
+		const char* msg = "Lost connection to server [Server Shutdown]";
+
+		int messageSize = strlen(msg) + 1;
+
+		memcpy(message, msg, messageSize);
+		response.WriteData(messageSize);
+		response.WriteData(message, messageSize);
+		response.WriteData(false);
+
+		Send(aClient.myAddress, response);
+
+		std::cout << "Sending status to " << aClient.myName << std::endl;
+
+	};
+
+
+	MessageClients(shutdownMessage);
+	std::this_thread::sleep_for(std::chrono::seconds(1));
+	myClients.clear();
+
+	myInputThread.join();
+	WSACleanup();
+
 }

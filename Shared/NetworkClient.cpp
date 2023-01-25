@@ -106,18 +106,20 @@ const bool NetworkClient::Update()
 {
 	if (myHasJoinedFlag)
 	{
+		if (myQuitFlag)
+		{
+			std::cout << "Disconnected!" << std::endl;
+			myQuitFlag = true;
+			myIsRunning = false;
+			return myIsRunning;
+		}
+
+
 		if (myHasMessageFlag)
 		{
 			if (strcmp(myMessage, "quit") == 0)
 			{
-				Buffer response;
-				response.WriteData(DataType::UserInfo);
-				response.WriteData(false);
-				response.WriteData(myID);
-
-				Send(myServerAddress, response);
-
-				myIsRunning = false;
+				OnDisconnect();
 				return myIsRunning;
 			}
 
@@ -193,8 +195,20 @@ const bool NetworkClient::Update()
 		case DataType::Command:
 			std::cout << "Recieved Command!" << std::endl;
 			break;
-		case DataType::Debug:
-			std::cout << "Recieved Debug!" << std::endl;
+		case DataType::Status:
+			
+			int messageSize;
+			char message[510];
+
+			incomingData.ReadData(messageSize);
+			incomingData.ReadData(message, messageSize);
+
+			std::cout << message << std::endl;
+
+			bool serverActive;
+			incomingData.ReadData(serverActive);
+
+			myQuitFlag = !serverActive;
 			break;
 		default:
 			break;
@@ -202,6 +216,24 @@ const bool NetworkClient::Update()
 
 		return myIsRunning;
 	}
+}
+
+void NetworkClient::OnDisconnect()
+{
+	if (!myIsRunning) return;
+
+	std::cout << "Disconnected!" << std::endl;
+
+	Buffer response;
+	response.WriteData(DataType::UserInfo);
+	response.WriteData(false);
+	response.WriteData(myID);
+
+	Send(myServerAddress, response);
+	myQuitFlag = true;
+	myIsRunning = false;
+
+	std::this_thread::sleep_for(std::chrono::seconds(1));
 }
 
 

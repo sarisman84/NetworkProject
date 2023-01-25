@@ -8,6 +8,8 @@ public:
 	NetworkClient(const std::wstring& anIP, const uint8_t aPort);
 	~NetworkClient() override;
 	const bool Update() override;
+
+	void OnDisconnect();
 private:
 	sockaddr_in myServerAddress;
 	bool myHasJoinedFlag;
@@ -18,4 +20,5 @@ private:
 
 	char myMessage[512];
 	int myID;
+	bool myQuitFlag = false;
 };

@@ -6,10 +6,11 @@ enum class SocketType : char
 
 enum class DataType : char
 {
-	UserInfo, Message, Command, Debug
+	UserInfo, Message, Command, Status
 };
 
 enum class EventType : char
 {
 	Join, Leave
 };
+

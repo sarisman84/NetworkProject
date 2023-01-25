@@ -11,11 +11,28 @@
 #include "NetworkServer.h"
 #define LISTEN_PORT 42000
 
+#include <Windows.h>
+
+
+NetworkServer server(LISTEN_PORT);
+
+BOOL WINAPI ConsoleEvents(DWORD dwCtrlType)
+{
+	switch (dwCtrlType)
+	{
+	case CTRL_CLOSE_EVENT:
+		server.OnShutdown();
+		return TRUE;
+	default:
+		return FALSE;
+	}
+}
 
 int main()
 {
-	NetworkServer server(LISTEN_PORT);
+	SetConsoleCtrlHandler(ConsoleEvents, TRUE);
 	while (server.Update());
+	server.OnShutdown();
 	return 0;
 }
 
